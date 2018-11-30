@@ -1,0 +1,104 @@
+version: '3'
+#networks:
+#  portal_network:
+#    driver: bridge
+services:
+        #oracle:
+        #        container_name: oracle
+        #        #build: redis
+        #        image: sath89/oracle-12c
+        #        restart: always
+                #networks:
+                #  portal_network:
+                #    aliases:
+                #      - portal1
+        #        volumes:
+        #                - /oracle/data:/u01/app/oracle
+        #        ports:
+        #                - "1521:1521"
+                        
+        redis:
+                container_name: redis
+                #build: redis
+                image: redis:3.2
+                restart: always
+                #networks:
+                #  portal_network:
+                #    aliases:
+                #      - portal1
+                volumes:
+                        - ./redis/conf/redis.conf:/usr/local/conf/redis.conf
+                ports:
+                        - "6379:6379"
+                command: [ "redis-server", "/usr/local/conf/redis.conf" ]
+
+        portal:
+                container_name: portal
+                build: portal
+                image: portal:1.0
+                restart: always
+                #networks:
+                #  portal_network:
+                #    aliases:
+                #      - portal1
+                depends_on:
+                        - redis
+                ports:
+                        - "7080:8080"
+                        
+        beneficial:
+                container_name: beneficial
+                build: beneficial
+                image: beneficial:1.0
+                restart: always
+                #networks:
+                #  portal_network:
+                #    aliases:
+                #      - beneficial1
+                depends_on:
+                        - redis
+                ports:
+                        - "8090:8080"
+                        
+        front:
+                container_name: front
+                image: "nginx"
+                #links:
+                #        - beneficial:beneficial2
+                #        - portal:portal2
+                depends_on:
+                        - portal
+                        - beneficial
+                #networks:
+                #  portal_network:
+                #    aliases:
+                #      - front
+                volumes:
+                        - ./front/portal:/usr/share/nginx/html
+                        - ./front/conf/nginx.conf:/etc/nginx/nginx.conf
+                        - ./front/logs:/etc/nginx/logs    
+                
+                ports:
+                        - "80:80"
+                        
+        manage:
+                container_name: manage
+                image: "nginx"
+                #links:
+                #        - beneficial:beneficial2
+                #        - portal:portal2
+                depends_on:
+                        - portal
+                #networks:
+                #  portal_network:
+                #    aliases:
+                #      - manage
+                volumes:
+                        - ./manage/portal:/usr/share/nginx/html
+                        - ./manage/conf/nginx.conf:/etc/nginx/nginx.conf
+                        - ./manage/logs:/etc/nginx/logs    
+                
+                ports:
+                        - "8766:80"
+                #expose:
+                        #- "8766"
