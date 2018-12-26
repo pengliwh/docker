@@ -1,0 +1,188 @@
+#!/bin/bash -eu
+#  _
+# | |_ ___ _ __ ___  _ __   ___   
+# | __/ _ \ '_ ` _ \| '_ \ / _ \  
+# | ||  __/ | | | | | |_) | (_) | 
+#  \__\___|_| |_| |_| .__/ \___/  
+#                   |_|                        
+
+
+umask 022 # directory permissions are 755 and file permissions are 644.
+
+function usage {
+    echo "$(basename $0) <etl.id>"
+    echo "e.g. $(basename $0) dw_test.mark_test"
+    echo "e.g. $(basename $0) dw_test.mark_test --sqoop-import"
+    echo "e.g. $(basename $0) dw_test.mark_test --sqoop-export"
+    echo "e.g. $(basename $0) dw_test.mark_test --hive"
+    echo "e.g. $(basename $0) dw_test.mark_test --put-hdfs"
+    echo "e.g. $(basename $0) dw_test.mark_test --spark-sql"
+    echo "e.g. $(basename $0) dw_test.mark_test --kafka-connect"
+    echo "e.g. $(basename $0) dw_test.mark_test --kylin-cube"
+}
+
+
+if [[ ! -f init.done ]]; then
+    echo "Tempo is not ready, run ./bin/init-tempo.sh first"
+    exit 9 
+fi
+
+if [[ $# -eq 1 ]]; then
+    project_id=$(echo $1|cut -d"." -f1) 
+    feed_id=$(echo $1|cut -d"." -f2)
+   
+    mkdir -p cfg/$project_id
+    touch cfg/$project_id/$feed_id.cfg
+    cat << EOF > cfg/$project_id/$feed_id.cfg
+#############################################
+#  Extract optional parameters:
+#	extract.dbc:  database connection for extract
+#	> if not assigned && no load.file set, tempo will load csv under in/<etl.id>.<batch_id>.csv by default, ?0/?1 represent first/second column or ?header_name, use ?{etl.getParameter('column one')} if header_name contains space
+#	extract.size: it gives JDBC driver a hint about the number of rows that should be fetched from the database when more rows are needed for the result set.
+#	> [NOTICE]: For MySQL dbc, set "extract.size=-2147483648" for large data volume, since a jdbc bug (https://bugs.mysql.com/bug.php?id=18148) 
+#############################################
+
+
+#############################################
+#  Load optional parameters:
+#       load.dbc:	database connection for load
+#	> if not assigned, will extract csv to out/<etl.id> by default
+#       load.size:    	bulk insert size; [Warning] don't config this for oracle dbc
+#       load.commit:  	auto commit size; if true, will be auto-commit mode
+#       load.file:	absolute path of a single file or .list file
+#	> if set && no extract.dbc specified, tempo will load this file(or .list) instead of default path, ?0 represent a whole line
+#       load.truncate:	if true, target table will be truncated before loading; false by default; 
+#	> [Warning] don't config load.truncate & load.commit=<number> at same time
+#############################################
+
+
+#############################################
+#  Transformation optional parameters:
+#   	transformation.dbc:     database connection for transformation
+#############################################
+
+
+EOF
+    mkdir -p sql/$project_id
+
+    # touch E/L/T SQL
+    touch sql/$project_id/$feed_id.ex.sql
+    touch sql/$project_id/$feed_id.ld.sql
+    touch sql/$project_id/$feed_id.tr.sql
+
+    mkdir -p dat/$project_id
+    echo "1900-01-01 01:00:00" > dat/$project_id/$feed_id.timestamp
+    echo "1" > dat/$project_id/$feed_id.batch
+    mkdir -p log/$project_id
+    mkdir -p out/$project_id
+    mkdir -p "in/$project_id"
+
+elif [[ $# -eq 2 ]] && [[ $2 == '--sqoop-import' ]]; then
+# new etl id for ./bin/tempo-sqoop.sh
+    project_id=$(echo $1|cut -d"." -f1) 
+    java -cp lib/tempo-common.jar tempo.entrance.TempoLauncher $1 tempo.sqoop.Import init
+    mkdir -p log/$project_id
+
+elif [[ $# -eq 2 ]] && [[ $2 == '--sqoop-export' ]]; then
+# new etl id for ./bin/tempo-sqoop.sh
+    project_id=$(echo $1|cut -d"." -f1) 
+    feed_id=$(echo $1|cut -d"." -f2)
+   
+    mkdir -p cfg/$project_id
+    touch cfg/$project_id/$feed_id.cfg
+    cat << EOF > cfg/$project_id/$feed_id.cfg
+##############################################
+# Sqoop v1.4.6 User Guide: https://sqoop.apache.org/docs/1.4.6/SqoopUserGuide.html
+#
+# extract.dbc=hdfs
+#############################################
+extract.dbc=hdfs
+
+#############################################
+# load.dbc : target database connection for sqoop export
+#
+# load.table : target table name (specify schema if needed)
+# load.export-dir : source hdfs path to export
+# load.delimeter: field delimeter, hive use '\001' defaultly
+#############################################
+load.dbc=
+load.table=
+load.export-dir=>
+load.delimeter=>
+EOF
+
+    mkdir -p sql/$project_id
+
+    # touch E/L/T SQL
+    mkdir -p dat/$project_id
+    date +"%Y-%m-%d %H:%M:%S" > dat/$project_id/$feed_id.timestamp
+    echo "1" > dat/$project_id/$feed_id.batch
+    mkdir -p log/$project_id
+
+
+elif [[ $# -eq 2 ]] && [[ $2 == '--hive' ]]; then
+# new etl id for ./bin/tempo-hive.sh
+    project_id=$(echo $1|cut -d"." -f1) 
+    feed_id=$(echo $1|cut -d"." -f2)
+
+    mkdir -p sql/$project_id
+    touch sql/$project_id/$feed_id.tr.hql
+    cat << EOF > sql/$project_id/$feed_id.tr.hql
+-- https://cwiki.apache.org/confluence/display/Hive/LanguageManual 
+EOF
+    mkdir -p dat/$project_id
+    echo "1900-01-01" > dat/$project_id/$feed_id.timestamp
+    echo "1" > dat/$project_id/$feed_id.batch
+    mkdir -p log/$project_id
+
+elif [[ $# -eq 2 ]] && [[ $2 == '--put-hdfs' ]]; then
+# new etl id for ./bin/put-hdfs.sh
+    project_id=$(echo $1|cut -d"." -f1) 
+    feed_id=$(echo $1|cut -d"." -f2)
+   
+    mkdir -p cfg/$project_id
+    touch cfg/$project_id/$feed_id.cfg
+    cat << EOF > cfg/$project_id/$feed_id.cfg
+##############################################
+# extract.file_path: source file path
+# extract.file_pattern: file name pattern (wildcard: e.g. *json)
+# extract.keep_original: true(default)/false/false-exclude-today,if false,will move original file to ./in/project_id/ else will copy
+# extract.file_required_exits : true(default)/false . if false, will exit with 0 when file didn't exist
+#############################################
+extract.file_path=
+extract.file_pattern=
+
+#############################################
+# load.add_partition: true/false(default), if true, will add add partition on specified stage table automatically
+# load.stage_table: specify stage table name
+#############################################
+EOF
+
+    mkdir -p dat/$project_id
+    date +"%Y-%m-%d" > dat/$project_id/$feed_id.timestamp
+    echo "1" > dat/$project_id/$feed_id.batch
+    mkdir -p log/$project_id
+elif [[ $# -eq 2 ]] && [[ $2 == '--spark-sql' ]]; then
+#new etl id for ./bin/tempo-spark.sh
+    project_id=$(echo $1|cut -d"." -f1)
+    feed_id=$(echo $1|cut -d"." -f2)
+    java -classpath "lib/tempo-spark2.jar:lib/tempo-common.jar" tempo.spark2.DriverMain $1   
+    mkdir -p dat/$project_id
+    echo "1" > dat/$project_id/$feed_id.batch
+    mkdir -p log/$project_id
+
+elif [[ $# -eq 2 ]] && [[ $2 == '--kafka-connect' ]]; then
+	java -cp lib/tempo-common.jar tempo.entrance.TempoLauncher $1 tempo.kafka.Connector init 
+elif [[ $# -eq 2 ]] && [[ $2 == '--kylin-cube' ]]; then
+	java -cp lib/tempo-common.jar tempo.entrance.TempoLauncher $1 tempo.kylin.ClientMain init 
+else
+    usage
+    exit 1 
+fi
+
+# disable attributes
+#       load.header:  	[only work when extract.dbc is null] true(default)/false
+#       load.delimiter: [only work when extract.dbc is null], e.g. load.delimiter=~
+#       load.quote: 	[only work when extract.dbc is null], e.g. load.quote=NULL
+
+# change load.file_type to load.file
