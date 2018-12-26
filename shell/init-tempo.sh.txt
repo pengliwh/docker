@@ -1,0 +1,77 @@
+#!/bin/bash -eu
+#  _
+# | |_ ___ _ __ ___  _ __   ___   
+# | __/ _ \ '_ ` _ \| '_ \ / _ \  
+# | ||  __/ | | | | | |_) | (_) | 
+#  \__\___|_| |_| |_| .__/ \___/  
+#                   |_|                        
+
+
+umask 022 # directory permissions are 755 and file permissions are 644.
+
+function usage {
+    echo "$(basename $0) is used for initializing tempo which will create required soft link with your personal project folder.
+
+usage: 
+1) to initialize with a existed project folder
+$(basename $0) <your_project_folder>
+
+2) to initialize with a new project folder
+$(basename $0) -n <expected_project_folder>
+"
+}
+
+# bin & lib is core
+# dbc & cfg & sql is project specific
+# dat & in & out & log is one time
+
+if [[ $# -eq 1 && -d $1 ]]; then
+    if [[ -d $1/dbc && -d $1/cfg && -d $1/sql ]]; then
+        ln -f -s $1/dbc ./
+        ln -f -s $1/cfg ./
+        ln -f -s $1/sql ./
+    else
+        echo "Error: dbc/cfg/sql must both exist in $1"
+        exit 2 
+    fi
+elif [[ $# -eq 2 && $1 == '-n' ]]; then
+    mkdir -p $2
+    mkdir -p $2/dbc 
+    mkdir -p $2/cfg
+    mkdir -p $2/sql
+    if [[ -d $2 ]]; then
+        ln -f -s $2/dbc ./
+        ln -f -s $2/cfg ./
+        ln -f -s $2/sql ./
+    else
+        echo "Error: can't create folder $2"
+        exit 3
+    fi 
+else
+    usage
+    exit 1
+fi
+
+mkdir -p dat
+mkdir -p in
+mkdir -p out
+mkdir -p log 
+
+# create project folder
+find ./cfg/ -maxdepth 1 -mindepth 1 -type d -printf '%f\n'|while read project
+do
+	mkdir -p dat/$project
+	mkdir -p in/$project
+	mkdir -p out/$project
+	mkdir -p log/$project
+done
+# loop sql to ensure every project folder exist 
+find ./sql/ -maxdepth 1 -mindepth 1 -type d -printf '%f\n'|while read project
+do
+	mkdir -p dat/$project
+	mkdir -p in/$project
+	mkdir -p out/$project
+	mkdir -p log/$project 
+done
+
+touch init.done

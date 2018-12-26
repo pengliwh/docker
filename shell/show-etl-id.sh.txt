@@ -1,37 +1,45 @@
+#!/bin/bash -eu
+#  _
+# | |_ ___ _ __ ___  _ __   ___   
+# | __/ _ \ '_ ` _ \| '_ \ / _ \  
+# | ||  __/ | | | | | |_) | (_) | 
+#  \__\___|_| |_| |_| .__/ \___/  
+#                   |_|                        
+
+
 function usage {
-        echo "$(basename $0) [option] <etl.id>"
-        echo "e.g. $(basename $0) dw_test.inv_basicinfo "
-        echo "e.g. to delete a etl.id, $(basename $0) -d dw_test.inv_basicinfo "
-        echo "e.g. to rename a etl.id, $(basename $0) -r dw_test.inv_basicinfo dw_test.new_id"
+	echo "$(basename $0) [option] <etl.id>"
+	echo "e.g. $(basename $0) dw_test.inv_basicinfo "
+	echo "e.g. to delete a etl.id, $(basename $0) -d dw_test.inv_basicinfo "
+	echo "e.g. to rename a etl.id, $(basename $0) -r dw_test.inv_basicinfo dw_test.new_id"
 }
 
 if [[ $# -eq 1 ]]; then
-        pattern=$(echo $1|tr "." "/")
-        find -L -wholename "*$pattern*"|grep -w "$pattern"
+	pattern=$(echo $1|tr "." "/")
+	find -L -wholename "*$pattern*"|grep -w "$pattern"
 elif [[ $# -eq 2 && $1 == "-d" ]]; then
-        read -p "warning: are you sure to delete $2 ?" yn
-        case $yn in
-                [Yy]*)
-                        pattern=$(echo $2|tr "." "/")
-                        #find -L -wholename "*$pattern*" -exec rm {} \;
-                        find -L -wholename "*$pattern*"|grep -w "$pattern"|xargs rm -f;
-                        ;;
-                *)
-                *)
-                        exit 1;
-        esac
+	read -p "warning: are you sure to delete $2 ?" yn
+	case $yn in
+		[Yy]*)
+			pattern=$(echo $2|tr "." "/")
+			#find -L -wholename "*$pattern*" -exec rm {} \;
+			find -L -wholename "*$pattern*"|grep -w "$pattern"|xargs rm -f;
+			;;
+		*)
+			exit 1;
+	esac
 elif [[ $# -eq 3 && $1 == "-r" ]]; then
-        pattern=$(echo $2|tr "." "/")
-        find -L -wholename "*$pattern*"|grep -w "$pattern"|while read line
-        do
-                old_project_id=$(echo $2|cut -d"." -f1)
-                old_feed_id=$(echo $2|cut -d"." -f2)
-                new_project_id=$(echo $3|cut -d"." -f1)
-                new_feed_id=$(echo $3|cut -d"." -f2)
-                rename=$(echo $line|sed "s/\b$old_feed_id\b/$new_feed_id/g"|sed "s/\b$old_project_id\b/$new_project_id/g")
-                mv $line $rename
-        done
+	pattern=$(echo $2|tr "." "/")
+	find -L -wholename "*$pattern*"|grep -w "$pattern"|while read line
+	do
+		old_project_id=$(echo $2|cut -d"." -f1)
+		old_feed_id=$(echo $2|cut -d"." -f2)
+		new_project_id=$(echo $3|cut -d"." -f1)
+		new_feed_id=$(echo $3|cut -d"." -f2)
+		rename=$(echo $line|sed "s/\b$old_feed_id\b/$new_feed_id/g"|sed "s/\b$old_project_id\b/$new_project_id/g")
+		mv $line $rename
+	done
 else
-        usage
-        exit 1
+	usage
+	exit 1
 fi
